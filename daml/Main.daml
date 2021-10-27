@@ -1,0 +1,134 @@
+module Main where
+
+import UserAdmin
+
+import Daml.Script
+
+setup : Script ()
+setup = script do
+  alice <- allocatePartyWithHint "Alice" (PartyIdHint "Alice")
+  bob <- allocatePartyWithHint "Bob" (PartyIdHint "Bob")
+  charlie <- allocatePartyWithHint "Charlie" (PartyIdHint "Charlie")
+  don <- allocatePartyWithHint "Don" (PartyIdHint "Don")
+  userAdmin <- allocatePartyWithHint "UserAdmin" (PartyIdHint "UserAdmin")
+  
+  now <- getTime
+
+  aliceFinancerRequest <- submit alice do
+    createCmd FinancerRequest
+      with
+        userAdmin = userAdmin
+        financer = alice
+        reason = "I have got contacts and project"
+
+  aliceFinancer <- submit userAdmin do
+    exerciseCmd aliceFinancerRequest GrantFinancerRight
+      with
+        financerWallet = 100.0
+
+  --aliceFinancer <- submit userAdmin do
+    --createCmd Financer
+      --with
+        --userAdmin = userAdmin
+        --financer = alice
+        --financerWallet = 100.00
+
+  (alicebobProject, aliceFinancer) <- submit alice do
+    exerciseCmd aliceFinancer CreateProject
+      with
+        worker = bob
+        description = "Alice Bob project"
+        price = 50.00
+        currency = "USD"
+
+  --bobOffer <- submit alice do
+    --exerciseCmd originalToken Offer
+      --with
+        --newOwner = bob
+        --price = 200.00
+
+  bobWorkerRequest <- submit bob do
+    createCmd WorkerRequest
+      with
+        userAdmin = userAdmin
+        worker = bob
+        reason = "I have got connections and project"
+
+  bobWorker <- submit userAdmin do
+   exerciseCmd bobWorkerRequest GrantWorkerRights
+      with
+        workerWallet = 0.0
+
+  alicebobProjectAfterEscrowUpdOnProjCompletion <- submit alice do
+    exerciseCmd alicebobProject UpdateEscrowWalletOnProjectCompletion
+
+  getWorkerForProjectRequest <- submit alice do
+    createCmd GetWorkerForProjectRequest
+      with
+        userAdmin = userAdmin
+        financer = alice
+
+  bobWorkerIdFetchedFromalicebobProject <- submit userAdmin do
+    exerciseCmd getWorkerForProjectRequest GrantGetWorkerForProjectRequest
+      with 
+        projId = alicebobProject
+
+  bobWorkerIdAfterWalletUpdate <- submit alice do
+    exerciseCmd alicebobProjectAfterEscrowUpdOnProjCompletion UpdateWorkerWalletOnProjectCompletion
+      with
+        workerId = bobWorkerIdFetchedFromalicebobProject
+
+  --Now create new charliedonProject to demonstrate project termination 
+
+  charlieFinancerRequest <- submit charlie do
+    createCmd FinancerRequest
+      with
+        userAdmin = userAdmin
+        financer = charlie
+        reason = "I have got contacts and project"
+
+  charlieFinancer <- submit userAdmin do
+    exerciseCmd charlieFinancerRequest GrantFinancerRight
+      with
+        financerWallet = 100.0
+
+  donWorkerRequest <- submit don do
+    createCmd WorkerRequest
+      with
+        userAdmin = userAdmin
+        worker = don
+        reason = "I have got connections and project"
+
+  donWorker <- submit userAdmin do
+   exerciseCmd donWorkerRequest GrantWorkerRights
+      with
+        workerWallet = 0.0
+
+  (charliedonProject, charlieFinancer) <- submit charlie do
+    exerciseCmd charlieFinancer CreateProject
+      with
+        worker = don
+        description = "Charlie Don project"
+        price = 25.00
+        currency = "USD"
+
+  charliedonProjectAfterEscrowUpdOnProjTermination <- submit don do
+    exerciseCmd charliedonProject UpdateEscrowWalletOnProjectTermination
+
+  getFinancerForProjectRequest <- submit don do
+    createCmd GetFinancerForProjectRequest
+      with
+        userAdmin = userAdmin
+        worker = don
+
+  charlieFinancerIdFetchedFromcharliedonProject <- submit userAdmin do
+    exerciseCmd getFinancerForProjectRequest GrantGetFinancerForProjectRequest
+      with 
+        projId = charliedonProject
+
+  charlieFinancerIdAfterWalletUpdate <- submit don do
+    exerciseCmd charliedonProjectAfterEscrowUpdOnProjTermination UpdateFinancerWalletOnProjectTermination
+      with
+        financerId = charlieFinancerIdFetchedFromcharliedonProject
+
+  return ()

@@ -1,0 +1,221 @@
+module UserAdmin where
+
+-- behavior
+-- datamodel
+-- rights/obligations
+
+template Project
+  with 
+    userAdmin: Party
+    financer: Party
+    worker: Party
+    description: Text
+    created: Time
+    price: Decimal
+    currency: Text
+    escrowWallet: Decimal
+   where
+    signatory financer
+    observer worker, userAdmin
+
+    key (financer, worker, description, escrowWallet): (Party, Party, Text, Decimal)
+    maintainer key._1
+
+    controller financer can
+        nonconsuming UpdateEscrowWalletOnProjectCompletion: ContractId Project
+            do
+                create this with
+                        escrowWallet = 0.0
+                        description = "Escrow updated" 
+                        
+
+    controller worker can
+        nonconsuming UpdateEscrowWalletOnProjectTermination: ContractId Project
+            do
+                create this with
+                        escrowWallet = 0.0
+                        description = "Escrow updated" 
+                        
+    controller financer can
+            nonconsuming GetWorkerForProject: (ContractId Worker)
+                        do 
+                           (projWorkerId, projWorker) <- fetchByKey @Worker worker 
+                           return (projWorkerId)
+
+    controller financer can
+            GetWorker: (Party)
+                do
+                    return (worker)
+
+    controller worker can
+            nonconsuming GetFinancerForProject: (ContractId Financer)
+                        do 
+                            (projFinancerId, projFinancer) <- fetchByKey @Financer (financer,"Deducted financer wallet") 
+                            return (projFinancerId)
+
+    controller worker can
+            GetFinancer: (Party)
+                do
+                    return (financer)
+
+    controller financer can
+            nonconsuming UpdateWorkerWalletOnProjectCompletion: (ContractId Worker)
+                with
+                    workerId: ContractId Worker
+                        do 
+                           let workerId.workerWallet = price --Assuming financer had initial amount in wallet as project price  
+                           return (workerId)            
+
+    controller worker can
+            nonconsuming UpdateFinancerWalletOnProjectTermination: (ContractId Financer)
+                with
+                    financerId: ContractId Financer
+                        do 
+                            let financerId.financerWallet = price --Assuming financer had initial amount in wallet as project price
+                            return (financerId)                        
+
+template Financer
+    with
+        userAdmin: Party
+        financer: Party
+        financerWallet: Decimal
+        reason: Text
+    where
+        signatory userAdmin, financer
+
+        key (financer, reason):  (Party, Text)
+        maintainer key._1
+
+        controller financer can
+            nonconsuming CreateProject: (ContractId Project, ContractId Financer)
+                with
+                    worker: Party
+                    description: Text
+                    price: Decimal
+                    currency: Text
+                do
+                    now <- getTime
+                    newProjectId <- create Project
+                        with 
+                            financer = financer
+                            created = now
+                            --At the time of creation of Project, the project price is deducted 
+                            --from financer wallet and added to escrow wallet
+                            escrowWallet = price 
+                            --financerWallet = financerWallet - price
+                            worker = worker
+                            description = description
+                            price = price
+                            currency = currency
+                            userAdmin = userAdmin
+                    financerId <- create this with 
+                                                financerWallet = this.financerWallet - price
+                                                reason = "Deducted financer wallet"
+
+                    return (newProjectId, financerId)
+
+        controller userAdmin can
+            RevokeFinancer: ()
+                do
+                    return ()
+
+template FinancerRequest
+    with
+        userAdmin: Party
+        financer: Party
+        reason: Text
+    where
+        signatory financer
+
+        controller userAdmin can
+            GrantFinancerRight: ContractId Financer
+                with
+                    financerWallet: Decimal
+                do
+                    create Financer 
+                        with 
+                            ..
+
+            RejectFinancerRequest: ()
+                do return ()
+
+template GetWorkerForProjectRequest
+    with
+        userAdmin: Party
+        financer: Party
+    where
+        signatory financer
+
+        controller userAdmin can
+            GrantGetWorkerForProjectRequest: ContractId Worker
+                with
+                    projId: ContractId Project
+                do
+                            worker <- exercise projId GetWorker
+                            (projWorkerId, projWorker) <- fetchByKey @Worker worker
+                            return (projWorkerId)
+
+            RejectGetWorkerForProjectRequest: ()
+                do return ()
+
+template Worker
+    with
+        userAdmin: Party
+        worker: Party
+        reason: Text
+        workerWallet: Decimal
+    where
+        signatory userAdmin, worker
+
+        key worker: Party
+        maintainer key 
+
+        controller worker can
+            SetWorkerWallet: (ContractId Worker)
+                with
+                    amt: Decimal
+                        do
+                            updWorkerId <- create this with workerWallet = amt  
+                            return (updWorkerId)
+
+        controller userAdmin can
+            RevokeWorkerRight: ()
+                do
+                    return ()
+                            
+template WorkerRequest
+    with
+        userAdmin: Party
+        worker: Party
+        reason: Text
+    where 
+        signatory worker
+
+        controller userAdmin can
+            GrantWorkerRights: ContractId Worker
+                with
+                    workerWallet: Decimal
+                do
+                    create Worker with ..
+
+            RejectWorkerRequest: ()
+                do return ()
+
+template GetFinancerForProjectRequest
+    with
+        userAdmin: Party
+        worker: Party
+    where
+        signatory worker
+
+        controller userAdmin can
+            GrantGetFinancerForProjectRequest: ContractId Financer
+                with
+                    projId: ContractId Project
+                do 
+                            financer <- exercise projId GetFinancer
+                            (projFinancerId, projFinancer) <- fetchByKey @Financer (financer,"Deducted financer wallet") 
+                            return (projFinancerId)
+
+            RejectGetFinancerForProjectRequest: ()
+                do return ()

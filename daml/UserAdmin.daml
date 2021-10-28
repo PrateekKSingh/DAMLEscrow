@@ -26,7 +26,7 @@ template Project
             do
                 create this with
                         escrowWallet = 0.0
-                        description = "Escrow updated" 
+                        description = "Escrow updated on prject completion" 
                         
 
     controller worker can
@@ -34,7 +34,7 @@ template Project
             do
                 create this with
                         escrowWallet = 0.0
-                        description = "Escrow updated" 
+                        description = "Escrow updated on project termination" 
                         
     controller financer can
             nonconsuming GetWorkerForProject: (ContractId Worker)
@@ -58,21 +58,29 @@ template Project
                 do
                     return (financer)
 
-    controller financer can
-            nonconsuming UpdateWorkerWalletOnProjectCompletion: (ContractId Worker)
-                with
-                    workerId: ContractId Worker
-                        do 
-                           let workerId.workerWallet = price --Assuming financer had initial amount in wallet as project price  
-                           return (workerId)            
+    --controller financer can
+      --      nonconsuming UpdateWorkerWalletOnProjectCompletion: ContractId Worker
+        --        with
+          --          toUpdWorkerId: ContractId Worker
+            --    do
+              --      updWorkerId <-  exercise toUpdWorkerId SetWorkerWallet
+                --                        with    
+                  --                          amt = price
+                    --return (updWorkerId)   
 
-    controller worker can
-            nonconsuming UpdateFinancerWalletOnProjectTermination: (ContractId Financer)
-                with
-                    financerId: ContractId Financer
-                        do 
-                            let financerId.financerWallet = price --Assuming financer had initial amount in wallet as project price
-                            return (financerId)                        
+    --controller worker can
+      --      nonconsuming UpdateFinancerWalletOnProjectTermination: (ContractId Financer)
+        --        with
+          --          financerId: ContractId Financer
+            --            do 
+              --              let financerId.financerWallet = price --Assuming financer had initial amount in wallet as project price
+                --            return (financerId)  
+
+    controller userAdmin can
+            GetProjectPrice: (Decimal)
+                do
+                    return (price)
+                      
 
 template Financer
     with
@@ -110,9 +118,19 @@ template Financer
                             userAdmin = userAdmin
                     financerId <- create this with 
                                                 financerWallet = this.financerWallet - price
-                                                reason = "Deducted financer wallet"
+                                                reason = "Deducted financer wallet on project creation"
 
                     return (newProjectId, financerId)
+
+        controller userAdmin can
+            SetFinancerWallet: (ContractId Financer)
+                with
+                    addamt: Decimal
+                        do
+                            updFinancerId <- create this with financerWallet = financerWallet + addamt  
+                                                              reason = "Updated financer wallet on project termination"
+                            return (updFinancerId)
+
 
         controller userAdmin can
             RevokeFinancer: ()
@@ -158,6 +176,32 @@ template GetWorkerForProjectRequest
             RejectGetWorkerForProjectRequest: ()
                 do return ()
 
+template UpdateWorkerWalletOnProjectCompletionRequest
+    with
+        financer: Party
+        userAdmin: Party
+        workerId: ContractId Worker
+        projectId: ContractId Project
+        reason: Text
+    where
+        signatory financer
+        observer userAdmin
+
+        controller userAdmin can
+            nonconsuming UpdateWorkerWalletOnProjectCompletion: ContractId Worker
+                with
+                    toUpdWorkerId: ContractId Worker
+                    toFetchPriceProjectId: ContractId Project
+                do
+                    projPrice <- exercise toFetchPriceProjectId GetProjectPrice
+                    updWorkerId <- exercise toUpdWorkerId SetWorkerWallet
+                                        with    
+                                            amt = projPrice
+                    return (updWorkerId)
+
+            RejectUpdateWorkerWalletOnProjectCompletionRequest: ()
+                do return ()
+
 template Worker
     with
         userAdmin: Party
@@ -170,12 +214,13 @@ template Worker
         key worker: Party
         maintainer key 
 
-        controller worker can
+        controller userAdmin can
             SetWorkerWallet: (ContractId Worker)
                 with
                     amt: Decimal
                         do
-                            updWorkerId <- create this with workerWallet = amt  
+                            updWorkerId <- create this with workerWallet = amt
+                                                            reason = "Updated worker wallet on project completion"  
                             return (updWorkerId)
 
         controller userAdmin can
@@ -214,8 +259,34 @@ template GetFinancerForProjectRequest
                     projId: ContractId Project
                 do 
                             financer <- exercise projId GetFinancer
-                            (projFinancerId, projFinancer) <- fetchByKey @Financer (financer,"Deducted financer wallet") 
+                            (projFinancerId, projFinancer) <- fetchByKey @Financer (financer,"Deducted financer wallet on project creation") 
                             return (projFinancerId)
 
             RejectGetFinancerForProjectRequest: ()
+                do return ()
+
+template UpdateFinancerWalletOnProjectTerminationRequest
+    with
+        worker: Party
+        userAdmin: Party
+        financerId: ContractId Financer
+        projectId: ContractId Project
+        reason: Text
+    where
+        signatory worker
+        observer userAdmin
+
+        controller userAdmin can
+            nonconsuming UpdateFinancerWalletOnProjectTermination: ContractId Financer
+                with
+                    toUpdFinancerId: ContractId Financer
+                    toFetchPriceProjectId: ContractId Project
+                do
+                    projPrice <- exercise toFetchPriceProjectId GetProjectPrice
+                    updFinancerId <- exercise toUpdFinancerId SetFinancerWallet
+                                        with    
+                                            addamt = projPrice
+                    return (updFinancerId)
+
+            RejectUpdateFinancerWalletOnProjectCompletionRequest: ()
                 do return ()

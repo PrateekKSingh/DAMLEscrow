@@ -73,11 +73,25 @@ setup = script do
       with 
         projId = alicebobProject
 
-  bobWorkerIdAfterWalletUpdate <- submit alice do
-    exerciseCmd alicebobProjectAfterEscrowUpdOnProjCompletion UpdateWorkerWalletOnProjectCompletion
-      with
-        workerId = bobWorkerIdFetchedFromalicebobProject
+ -- bobWorkerIdAfterWalletUpdate <- submit alice do
+   -- exerciseCmd alicebobProjectAfterEscrowUpdOnProjCompletion UpdateWorkerWalletOnProjectCompletion
+     -- with
+       -- workerId = bobWorkerIdFetchedFromalicebobProject
 
+  aliceUpdateWorkerWalletOnProjectCompletionRequest <- submit alice do
+    createCmd UpdateWorkerWalletOnProjectCompletionRequest
+      with
+        financer = alice
+        userAdmin = userAdmin
+        workerId = bobWorkerIdFetchedFromalicebobProject
+        projectId = alicebobProjectAfterEscrowUpdOnProjCompletion
+        reason = "Alice Bob Project completed"
+
+  aliceUpdateWorkerWalletOnProjectCompletion <- submit userAdmin do
+    exerciseCmd aliceUpdateWorkerWalletOnProjectCompletionRequest UpdateWorkerWalletOnProjectCompletion
+      with 
+        toUpdWorkerId = bobWorkerIdFetchedFromalicebobProject
+        toFetchPriceProjectId = alicebobProjectAfterEscrowUpdOnProjCompletion
   --Now create new charliedonProject to demonstrate project termination 
 
   charlieFinancerRequest <- submit charlie do
@@ -126,9 +140,24 @@ setup = script do
       with 
         projId = charliedonProject
 
-  charlieFinancerIdAfterWalletUpdate <- submit don do
-    exerciseCmd charliedonProjectAfterEscrowUpdOnProjTermination UpdateFinancerWalletOnProjectTermination
+  --charlieFinancerIdAfterWalletUpdate <- submit don do
+    --exerciseCmd charliedonProjectAfterEscrowUpdOnProjTermination UpdateFinancerWalletOnProjectTermination
+      --with
+        --financerId = charlieFinancerIdFetchedFromcharliedonProject
+
+  charlieUpdateFinancerWalletOnProjectTerminationRequest <- submit don do
+    createCmd UpdateFinancerWalletOnProjectTerminationRequest
       with
+        worker = don
+        userAdmin = userAdmin
         financerId = charlieFinancerIdFetchedFromcharliedonProject
+        projectId = charliedonProjectAfterEscrowUpdOnProjTermination
+        reason = "Charlie Don Project terminated"
+
+  charlieUpdateFinancerWalletOnProjectTermination <- submit userAdmin do
+    exerciseCmd charlieUpdateFinancerWalletOnProjectTerminationRequest UpdateFinancerWalletOnProjectTermination
+      with 
+        toUpdFinancerId = charlieFinancerIdFetchedFromcharliedonProject
+        toFetchPriceProjectId = charliedonProjectAfterEscrowUpdOnProjTermination
 
   return ()
